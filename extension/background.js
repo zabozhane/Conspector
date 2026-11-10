@@ -108,12 +108,16 @@ async function callLLM(engine, settings, system, user) {
   }
   const key = settings.keys[engine];
   if (!key) throw new Error(`Нет API-ключа для ${PROVIDERS[engine].name}`);
-  const body = {
-    model: settings.models[engine].llm,
-    temperature: 0.2,
-    messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
-  };
-  for (let attempt = 0; attempt < 4; attempt++) {
+  let model = settings.models[engine].llm;
+  let switched = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const body = {
+      model,
+      temperature: 0.2,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }]
+    };
+    // у reasoning-моделей gpt-oss размышления не нужны — экономим лимит и время
+    if (/gpt-oss/.test(model)) body.reasoning_effort = 'low';
     const r = await fetch(PROVIDERS[engine].baseUrl + '/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
@@ -124,11 +128,38 @@ async function callLLM(engine, settings, system, user) {
       await new Promise((ok) => setTimeout(ok, wait * 1000));
       continue;
     }
-    if (!r.ok) throw new Error(`Ошибка ИИ (${r.status}): ${(await r.text()).slice(0, 300)}`);
+    if (!r.ok) {
+      const text = await r.text();
+      // модель сняли с провайдера — сами выбираем доступную и запоминаем её
+      if (!switched && (r.status === 404 || /model_not_found|decommissioned|does not exist/i.test(text))) {
+        const next = await pickChatModel(engine, key, model);
+        if (next) {
+          model = next; switched = true;
+          const st = await getSettings();
+          st.models[engine].llm = next;
+          await chrome.storage.local.set({ settings: st });
+          continue;
+        }
+      }
+      throw new Error(`Ошибка ИИ (${r.status}): ${text.slice(0, 300)}`);
+    }
     const j = await r.json();
     return j.choices?.[0]?.message?.content || '';
   }
   throw new Error('Превышен лимит запросов к ИИ, попробуйте позже');
+}
+
+// Выбор доступной чат-модели из списка провайдера
+const PREFERRED = ['openai/gpt-oss-120b', 'moonshotai/kimi-k2-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'openai/gpt-oss-20b', 'meta-llama/llama-4-scout-17b-16e-instruct', 'gpt-4o-mini', 'gpt-4.1-mini'];
+async function pickChatModel(engine, key, broken) {
+  try {
+    const r = await fetch(PROVIDERS[engine].baseUrl + '/models', { headers: { Authorization: 'Bearer ' + key } });
+    if (!r.ok) return null;
+    const ids = (await r.json()).data.filter((m) => m.active !== false).map((m) => m.id)
+      .filter((id) => id !== broken && !/whisper|tts|guard|embed|transcribe|audio|image|dall|moderation|prompt-guard|orpheus|playai/i.test(id));
+    return PREFERRED.find((id) => ids.includes(id)) || ids.find((id) => /gpt-oss|llama|qwen|kimi|gpt-4/i.test(id)) || ids[0] || null;
+  } catch { return null; }
 }
 
 async function maybeMakeNotes(sessionId, force = false) {
@@ -194,7 +225,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // от offscreen-документа
     case 'segment':
       updateSession(msg.sessionId, (s) => { s.segments.push({ t: msg.t, text: msg.text }); })
-        .then(() => maybeMakeNotes(msg.sessionId));
+        // фрагменты, распознанные уже после «Стоп», конспектируем сразу, без ожидания порога
+        .then(() => getRec()).then((rec) => maybeMakeNotes(msg.sessionId, rec?.sessionId !== msg.sessionId));
       return false;
     case 'queue':
       getRec().then((rec) => { if (rec) { rec.queue = msg.queue; chrome.storage.session.set({ rec }); } });

@@ -2,7 +2,8 @@ import { PROVIDERS } from './shared.js';
 
 const SR = 16000;              // Whisper работает на 16 кГц
 const FRAME = SR / 10;         // кадр 100 мс
-const MIN_SEC = 12, MAX_SEC = 28;
+const MIN_SEC = 15, MAX_SEC = 28;
+const CUT_PAUSE_FRAMES = 7;     // режем только на паузе ≥ 0,7 с, чтобы не рвать фразы
 const SILENCE_RMS = 0.006;
 
 let ctx = null, stream = null, settings = null, sessionId = null;
@@ -47,7 +48,7 @@ function pushFrame(f) {
   totalSamples += FRAME;
   const sec = chunk.length / 10;
   if (sec >= MIN_SEC) {
-    const tail = chunk.slice(-4);
+    const tail = chunk.slice(-CUT_PAUSE_FRAMES);
     if (tail.every((x) => x.rms < SILENCE_RMS)) return cut(chunk.length);
   }
   if (sec >= MAX_SEC) {
@@ -128,6 +129,8 @@ function toWav(f32) {
   return new Blob([buf], { type: 'audio/wav' });
 }
 
+const FALLBACK_ASR = { groq: 'whisper-large-v3-turbo', openai: 'whisper-1' };
+
 async function transcribeApi(audio) {
   const engine = settings.asrEngine;
   const fd = new FormData();
@@ -147,6 +150,11 @@ async function transcribeApi(audio) {
       continue;
     }
     if (r.status === 401) throw new Error('Неверный API-ключ — проверьте его в настройках');
+    if (r.status === 404 && fd.get('model') !== FALLBACK_ASR[engine]) {
+      // модель сняли — переходим на запасную
+      fd.set('model', FALLBACK_ASR[engine]); settings.models[engine].asr = FALLBACK_ASR[engine];
+      continue;
+    }
     if (!r.ok) throw new Error(`Ошибка распознавания (${r.status}): ${(await r.text()).slice(0, 200)}`);
     return (await r.json()).text || '';
   }

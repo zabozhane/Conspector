@@ -53,7 +53,10 @@ function render() {
   if (ai && session.segments.length > session.notesUpto && session.notes) {
     notesHtml += `<p class="muted">Ещё ${session.segments.length - session.notesUpto} фрагм. ждут конспектирования${notesBusy ? '…' : ' — конспект дополнится автоматически'}.</p>`;
   } else if (ai && !session.notes && session.segments.length) {
-    notesHtml = `<p class="muted">ИИ-конспект появится, когда наберётся несколько минут речи. Пока — расшифровка:</p>` + notesHtml;
+    const why = session.notesError ? 'ИИ-конспект не получился (ошибка выше) — нажмите «↻ Обновить конспект».'
+      : recHere ? 'ИИ-конспект появится, когда наберётся несколько минут речи.'
+      : notesBusy ? 'ИИ пишет конспект…' : 'Нажмите «↻ Обновить конспект», чтобы ИИ сделал конспект.';
+    notesHtml = `<p class="muted">${why} Пока — расшифровка:</p>` + notesHtml;
   }
   $('notes').innerHTML = notesHtml;
   const atBottom = $('transcript').parentElement.scrollHeight - $('transcript').parentElement.scrollTop - $('transcript').parentElement.clientHeight < 60;

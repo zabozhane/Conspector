@@ -3,8 +3,8 @@ export const PROVIDERS = {
   groq: {
     name: 'Groq (бесплатный ключ)',
     baseUrl: 'https://api.groq.com/openai/v1',
-    asrModel: 'whisper-large-v3-turbo',
-    llmModel: 'llama-3.3-70b-versatile',
+    asrModel: 'whisper-large-v3',
+    llmModel: 'openai/gpt-oss-120b',
     keyUrl: 'https://console.groq.com/keys'
   },
   openai: {
@@ -47,9 +47,13 @@ export async function getSettings() {
       groq: { ...DEFAULT_SETTINGS.models.groq, ...(settings.models?.groq || {}) },
       openai: { ...DEFAULT_SETTINGS.models.openai, ...(settings.models?.openai || {}) }
     };
+    if (RETIRED.includes(s.models.groq.llm)) s.models.groq.llm = PROVIDERS.groq.llmModel;
   }
   return s;
 }
+
+// Модели, которые провайдеры уже сняли: в сохранённых настройках меняем на текущие
+const RETIRED = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama3-70b-8192', 'qwen/qwen3-32b'];
 
 export async function saveSettings(s) {
   await chrome.storage.local.set({ settings: s });
@@ -89,18 +93,20 @@ export function plainNotes(session) {
   return out.join('\n\n');
 }
 
-export function notesMarkdown(session) {
+// forExport: в файле ниже и так идёт полная расшифровка, поэтому без ИИ-конспекта
+// не дублируем её второй раз под видом «конспекта»
+export function notesMarkdown(session, forExport = false) {
   const parts = [];
   if (session.summary) parts.push('## Кратко\n\n' + session.summary.trim());
   if (session.notes && session.notes.trim()) parts.push('## Конспект\n\n' + session.notes.trim());
-  else if (session.segments.length) parts.push('## Конспект\n\n' + plainNotes(session));
+  else if (session.segments.length && !forExport) parts.push('## Расшифровка по абзацам\n\n' + plainNotes(session));
   return parts.join('\n\n');
 }
 
 export function exportMarkdown(session) {
   const date = new Date(session.startedAt).toLocaleString('ru-RU');
   const transcript = session.segments.map((s) => `[${fmtTime(s.t)}] ${s.text}`).join('\n');
-  return `# ${session.title}\n\nИсточник: ${session.url}\nДата: ${date}\n\n${notesMarkdown(session)}\n\n## Полная расшифровка\n\n${transcript}\n`;
+  return `# ${session.title}\n\nИсточник: ${session.url}\nДата: ${date}\n\n${notesMarkdown(session, true) || '_ИИ-конспект не был сделан._'}\n\n## Полная расшифровка\n\n${transcript}\n`;
 }
 
 // Мини-рендер Markdown → HTML (заголовки, списки, жирный, курсив, код)
