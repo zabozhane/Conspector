@@ -1,0 +1,80 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Конспектор — настройки</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { max-width: 640px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 20px; } h2 { font-size: 16px; margin: 28px 0 8px; }
+  label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px 14px; }
+  .row { display: flex; gap: 8px; align-items: center; } .row > input { flex: 1; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+  details summary { cursor: pointer; margin-top: 12px; color: var(--muted); }
+  #saved { color: #16a34a; margin-left: 8px; }
+  ol li { margin: 4px 0; }
+</style></head><body>
+<h1>Конспектор — настройки</h1>
+
+<div class="card">
+  <p><b>Быстрый старт (бесплатно):</b></p>
+  <ol>
+    <li>Зайдите на <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a> (вход через Google), нажмите <i>Create API Key</i> и скопируйте ключ.</li>
+    <li>Вставьте его в поле «Ключ Groq» ниже и нажмите «Сохранить».</li>
+    <li>Откройте видео, нажмите значок Конспектора → <b>● Начать запись</b>.</li>
+  </ol>
+</div>
+
+<h2>Распознавание речи</h2>
+<div class="card">
+  <label for="asrEngine">Чем распознавать</label>
+  <select id="asrEngine">
+    <option value="groq">Groq Whisper — бесплатный ключ, лучшее качество</option>
+    <option value="local">Локально в браузере — без ключа и интернета, нагружает Mac</option>
+    <option value="openai">OpenAI — платно (~20–40 ₽ за час)</option>
+  </select>
+  <div id="localBox">
+    <label for="localModel">Локальная модель</label>
+    <select id="localModel"></select>
+    <div class="row" style="margin-top:8px"><button id="preload">Скачать модель заранее</button><span id="preloadStatus" class="muted"></span></div>
+    <p class="muted">Модель скачивается один раз и хранится в браузере. На Mac с M1 и новее работает через видеокарту.</p>
+  </div>
+  <label for="language">Язык видео</label>
+  <select id="language">
+    <option value="ru">Русский</option><option value="en">Английский</option><option value="uk">Украинский</option>
+    <option value="de">Немецкий</option><option value="fr">Французский</option><option value="es">Испанский</option>
+    <option value="auto">Определять автоматически</option>
+  </select>
+  <label class="check"><input type="checkbox" id="muteTab"> Не воспроизводить звук видео во время записи</label>
+</div>
+
+<h2>Конспект</h2>
+<div class="card">
+  <label for="notesEngine">Кто пишет конспект</label>
+  <select id="notesEngine">
+    <option value="groq">ИИ Groq (Llama) — бесплатно, тот же ключ</option>
+    <option value="chrome">Встроенный ИИ Chrome (Gemini Nano) — бесплатно, без ключа, экспериментально</option>
+    <option value="openai">ИИ OpenAI — платно, копейки</option>
+    <option value="plain">Без ИИ — расшифровка по абзацам с таймкодами</option>
+  </select>
+  <div id="chromeBox" class="row" style="margin-top:8px"><button id="chromeAi">Проверить / скачать встроенный ИИ</button><span id="chromeStatus" class="muted"></span></div>
+  <label for="notesEveryChars">Дописывать конспект каждые … символов расшифровки</label>
+  <input type="number" id="notesEveryChars" min="800" step="500">
+  <p class="muted">3500 символов ≈ 3–4 минуты речи. Меньше — чаще обновления, но больше запросов.</p>
+</div>
+
+<h2>Ключи API</h2>
+<div class="card">
+  <label for="key-groq">Ключ Groq <a class="muted" href="https://console.groq.com/keys" target="_blank">получить</a></label>
+  <div class="row"><input type="password" id="key-groq" placeholder="gsk_…" autocomplete="off"><button data-test="groq">Проверить</button></div>
+  <label for="key-openai">Ключ OpenAI (необязательно) <a class="muted" href="https://platform.openai.com/api-keys" target="_blank">получить</a></label>
+  <div class="row"><input type="password" id="key-openai" placeholder="sk-…" autocomplete="off"><button data-test="openai">Проверить</button></div>
+  <p class="muted">Ключи хранятся только в этом браузере и отправляются только в Groq / OpenAI.</p>
+  <details><summary>Модели (для продвинутых)</summary>
+    <label>Groq: распознавание / конспект</label>
+    <div class="row"><input type="text" id="m-groq-asr"><input type="text" id="m-groq-llm"></div>
+    <label>OpenAI: распознавание / конспект</label>
+    <div class="row"><input type="text" id="m-openai-asr"><input type="text" id="m-openai-llm"></div>
+  </details>
+</div>
+
+<p style="margin-top:24px"><button class="primary" id="save">Сохранить</button><span id="saved" hidden>Сохранено ✓</span></p>
+<script type="module" src="options.js"></script>
+</body></html>

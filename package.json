@@ -1,0 +1,12 @@
+{
+  "name": "conspector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome-расширение: речь из видео → текст → конспект",
+  "scripts": {
+    "build": "esbuild src/local-asr-worker.src.js --bundle --format=esm --platform=browser --minify --outfile=extension/local-asr-worker.js && node scripts/copy-wasm.mjs",
+    "zip": "npm run build && cd extension && zip -qr ../conspector.zip ."
+  },
+  "dependencies": { "@huggingface/transformers": "4.3.1" },
+  "devDependencies": { "esbuild": "0.25.12" }
+}

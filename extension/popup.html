@@ -1,0 +1,16 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Конспектор</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { width: 280px; padding: 14px; display: grid; gap: 10px; }
+  h1 { font-size: 15px; margin: 0; }
+  .row { display: flex; gap: 8px; } .row button { flex: 1; }
+  #toggle { width: 100%; padding: 10px; font-size: 15px; }
+</style></head><body>
+<h1>Конспектор</h1>
+<div id="status" class="muted"><span class="dot"></span>Запись не идёт</div>
+<button id="toggle" class="primary">● Начать запись этой вкладки</button>
+<div id="err" class="error" hidden></div>
+<div class="row"><button id="panel">Открыть конспект</button><button id="opts">Настройки</button></div>
+<div class="muted">Горячая клавиша: Alt+Shift+S (на Mac ⌥⇧S)</div>
+<script type="module" src="popup.js"></script>
+</body></html>

@@ -1,0 +1,46 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Конспектор</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; }
+  header { padding: 10px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+  .top { display: flex; gap: 8px; align-items: center; }
+  .top select { flex: 1; min-width: 0; }
+  #status { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button { flex: 1; border-radius: 8px; }
+  .tabs button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  main { flex: 1; overflow: auto; padding: 4px 14px 16px; }
+  #notes h2 { font-size: 16px; margin: 16px 0 6px; } #notes h3, #notes h4 { font-size: 14px; margin: 14px 0 4px; }
+  #notes ul, #notes ol { padding-left: 20px; margin: 4px 0; } #notes p { margin: 6px 0; }
+  .seg { padding: 4px 0; border-bottom: 1px dashed var(--line); }
+  .seg .t { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; font-size: 12px; }
+  footer { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  footer button { flex: 1 1 auto; font-size: 13px; padding: 5px 8px; }
+  .empty { color: var(--muted); text-align: center; margin-top: 40px; }
+  .spin::after { content: '…'; animation: pulse 1s infinite; }
+</style></head><body>
+<header>
+  <div class="top">
+    <select id="session" title="Записи"></select>
+    <button id="opts" title="Настройки">⚙</button>
+  </div>
+  <div id="status"><span id="statusText" class="muted"><span class="dot"></span>Запись не идёт</span>
+    <button id="toggle" class="primary">● Записать</button></div>
+  <div id="progress" class="muted" hidden></div>
+  <div id="err" class="error" hidden></div>
+  <div class="tabs"><button data-tab="notes" class="active">Конспект</button><button data-tab="transcript">Расшифровка</button></div>
+</header>
+<main>
+  <div id="notes"></div>
+  <div id="transcript" hidden></div>
+</main>
+<footer>
+  <button id="update" title="Дописать конспект по новому тексту">↻ Обновить конспект</button>
+  <button id="summary" title="Короткая выжимка всего видео">Итоги</button>
+  <button id="copy">Копировать</button>
+  <button id="copyPrompt" title="Скопировать расшифровку с промптом для ChatGPT / Claude">Копировать с промптом</button>
+  <button id="download">Скачать .md</button>
+  <button id="del" title="Удалить запись">🗑</button>
+</footer>
+<script type="module" src="sidepanel.js"></script>
+</body></html>
