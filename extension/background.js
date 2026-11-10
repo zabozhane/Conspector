@@ -225,7 +225,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // от offscreen-документа
     case 'segment':
       updateSession(msg.sessionId, (s) => { s.segments.push({ t: msg.t, text: msg.text }); })
-        .then(() => maybeMakeNotes(msg.sessionId));
+        // фрагменты, распознанные уже после «Стоп», конспектируем сразу, без ожидания порога
+        .then(() => getRec()).then((rec) => maybeMakeNotes(msg.sessionId, rec?.sessionId !== msg.sessionId));
       return false;
     case 'queue':
       getRec().then((rec) => { if (rec) { rec.queue = msg.queue; chrome.storage.session.set({ rec }); } });

@@ -93,18 +93,20 @@ export function plainNotes(session) {
   return out.join('\n\n');
 }
 
-export function notesMarkdown(session) {
+// forExport: в файле ниже и так идёт полная расшифровка, поэтому без ИИ-конспекта
+// не дублируем её второй раз под видом «конспекта»
+export function notesMarkdown(session, forExport = false) {
   const parts = [];
   if (session.summary) parts.push('## Кратко\n\n' + session.summary.trim());
   if (session.notes && session.notes.trim()) parts.push('## Конспект\n\n' + session.notes.trim());
-  else if (session.segments.length) parts.push('## Конспект\n\n' + plainNotes(session));
+  else if (session.segments.length && !forExport) parts.push('## Расшифровка по абзацам\n\n' + plainNotes(session));
   return parts.join('\n\n');
 }
 
 export function exportMarkdown(session) {
   const date = new Date(session.startedAt).toLocaleString('ru-RU');
   const transcript = session.segments.map((s) => `[${fmtTime(s.t)}] ${s.text}`).join('\n');
-  return `# ${session.title}\n\nИсточник: ${session.url}\nДата: ${date}\n\n${notesMarkdown(session)}\n\n## Полная расшифровка\n\n${transcript}\n`;
+  return `# ${session.title}\n\nИсточник: ${session.url}\nДата: ${date}\n\n${notesMarkdown(session, true) || '_ИИ-конспект не был сделан._'}\n\n## Полная расшифровка\n\n${transcript}\n`;
 }
 
 // Мини-рендер Markdown → HTML (заголовки, списки, жирный, курсив, код)
