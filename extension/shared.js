@@ -3,8 +3,8 @@ export const PROVIDERS = {
   groq: {
     name: 'Groq (бесплатный ключ)',
     baseUrl: 'https://api.groq.com/openai/v1',
-    asrModel: 'whisper-large-v3-turbo',
-    llmModel: 'llama-3.3-70b-versatile',
+    asrModel: 'whisper-large-v3',
+    llmModel: 'openai/gpt-oss-120b',
     keyUrl: 'https://console.groq.com/keys'
   },
   openai: {
@@ -47,9 +47,13 @@ export async function getSettings() {
       groq: { ...DEFAULT_SETTINGS.models.groq, ...(settings.models?.groq || {}) },
       openai: { ...DEFAULT_SETTINGS.models.openai, ...(settings.models?.openai || {}) }
     };
+    if (RETIRED.includes(s.models.groq.llm)) s.models.groq.llm = PROVIDERS.groq.llmModel;
   }
   return s;
 }
+
+// Модели, которые провайдеры уже сняли: в сохранённых настройках меняем на текущие
+const RETIRED = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama3-70b-8192', 'qwen/qwen3-32b'];
 
 export async function saveSettings(s) {
   await chrome.storage.local.set({ settings: s });
