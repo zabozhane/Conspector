@@ -17,6 +17,9 @@
   footer { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; }
   footer button { flex: 1 1 auto; font-size: 13px; padding: 5px 8px; }
   .empty { color: var(--muted); text-align: center; margin-top: 40px; }
+  .speed { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .speed button { padding: 2px 8px; font-size: 12px; }
+  .speed button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
   .spin::after { content: '…'; animation: pulse 1s infinite; }
 </style></head><body>
 <header>
@@ -26,6 +29,8 @@
   </div>
   <div id="status"><span id="statusText" class="muted"><span class="dot"></span>Запись не идёт</span>
     <button id="toggle" class="primary">● Записать</button></div>
+  <div id="speed" class="speed" hidden><span class="muted">Скорость видео:</span>
+    <button data-rate="1">1x</button><button data-rate="1.25">1.25x</button><button data-rate="1.5">1.5x</button><button data-rate="2">2x</button></div>
   <div id="progress" class="muted" hidden></div>
   <div id="err" class="error" hidden></div>
   <div class="tabs"><button data-tab="notes" class="active">Конспект</button><button data-tab="transcript">Расшифровка</button></div>

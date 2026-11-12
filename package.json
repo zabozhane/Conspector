@@ -1,6 +1,6 @@
 {
   "name": "conspector",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Chrome-расширение: речь из видео → текст → конспект",
   "scripts": {
