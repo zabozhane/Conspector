@@ -144,7 +144,22 @@ async function transcribeApi(audio) {
     const r = await fetch(PROVIDERS[engine].baseUrl + '/audio/transcriptions', {
       method: 'POST', headers: { Authorization: 'Bearer ' + settings.keys[engine] }, body: fd
     });
-    if (r.status === 429 || r.status >= 500) {
+    if (r.status === 429) {
+      const retry = parseFloat(r.headers.get('retry-after')) || 0;
+      const body = await r.text();
+      // дневной лимит модели исчерпан — переходим на запасную с отдельным лимитом
+      if ((retry > 60 || /per day|RPD|TPD|ASD/i.test(body)) ) {
+        if (fd.get('model') !== FALLBACK_ASR[engine]) {
+          fd.set('model', FALLBACK_ASR[engine]); settings.models[engine].asr = FALLBACK_ASR[engine];
+          chrome.runtime.sendMessage({ type: 'notice', text: `Дневной лимит основной модели распознавания исчерпан — переключился на ${FALLBACK_ASR[engine]}` }).catch(() => {});
+          continue;
+        }
+        throw new Error('Дневной бесплатный лимит распознавания Groq исчерпан. Переключитесь на локальное распознавание в настройках или продолжите завтра.');
+      }
+      await new Promise((ok) => setTimeout(ok, Math.min(60, retry || 5 * (attempt + 1)) * 1000));
+      continue;
+    }
+    if (r.status >= 500) {
       const wait = Math.min(60, parseFloat(r.headers.get('retry-after')) || 5 * (attempt + 1));
       await new Promise((ok) => setTimeout(ok, wait * 1000));
       continue;
@@ -239,6 +254,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg.type) {
     case 'offscreen-start': return reply(start(msg));
     case 'offscreen-stop': return reply(stop());
+    case 'offscreen-flush': if (stream && chunk.length) cut(chunk.length); return reply(Promise.resolve());
     case 'offscreen-llm': return reply(chromeLLM(msg.system, msg.user).then((text) => ({ text })));
     case 'offscreen-preload': return reply(ensureWorker(msg.model).then(() => ({})));
   }

@@ -83,7 +83,8 @@ async function startRecording(tabId) {
   const session = await createSession(tab);
   const res = await chrome.runtime.sendMessage({ type: 'offscreen-start', streamId, sessionId: session.id, settings });
   if (!res?.ok) throw new Error(res?.error || 'Не удалось начать захват звука');
-  await setRec({ tabId, sessionId: session.id, startedAt: Date.now(), queue: 0 });
+  await setRec({ tabId, sessionId: session.id, startedAt: Date.now(), queue: 0, videoPaused: false });
+  injectProbe(tabId);
   return session.id;
 }
 
@@ -94,6 +95,35 @@ async function stopRecording() {
   await setRec(null);
   // дописать конспект по остатку текста
   maybeMakeNotes(rec.sessionId, true);
+}
+
+// ---------- связь с видеоплеером на странице ----------
+function injectProbe(tabId) {
+  return chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['video-probe.js'] }).catch(() => {});
+}
+
+async function onVideoState(msg, sender) {
+  const rec = await getRec();
+  if (!rec || sender.tab?.id !== rec.tabId) return;
+  // при нескольких видео на странице слушаем самое крупное
+  if (msg.area < (rec.videoArea || 0) * 0.5 && sender.frameId !== rec.videoFrame) return;
+  const paused = !!msg.paused;
+  const changed = paused !== !!rec.videoPaused || msg.rate !== rec.videoRate;
+  rec.videoFrame = sender.frameId; rec.videoArea = msg.area;
+  rec.videoPaused = paused; rec.videoRate = msg.rate;
+  await chrome.storage.session.set({ rec });
+  if (changed) broadcastStatus();
+  // на паузе / в конце видео сразу дорасшифровываем недоговорённый фрагмент
+  if (paused) chrome.runtime.sendMessage({ type: 'offscreen-flush' }).catch(() => {});
+}
+
+async function setRate(rate) {
+  const rec = await getRec();
+  if (!rec) throw new Error('Запись не идёт');
+  await injectProbe(rec.tabId);
+  const opts = rec.videoFrame !== undefined ? { frameId: rec.videoFrame } : {};
+  const r = await chrome.tabs.sendMessage(rec.tabId, { type: 'cs-rate', rate }, opts).catch(() => null);
+  if (!r?.ok) throw new Error('Не нашёл видеоплеер на странице — поменяйте скорость в самом плеере');
 }
 
 // ---------- конспект ----------
@@ -110,7 +140,8 @@ async function callLLM(engine, settings, system, user) {
   if (!key) throw new Error(`Нет API-ключа для ${PROVIDERS[engine].name}`);
   let model = settings.models[engine].llm;
   let switched = false;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  const tried = new Set();
+  for (let attempt = 0; attempt < 8; attempt++) {
     const body = {
       model,
       temperature: 0.2,
@@ -124,15 +155,26 @@ async function callLLM(engine, settings, system, user) {
       body: JSON.stringify(body)
     });
     if (r.status === 429) {
-      const wait = Math.min(60, parseFloat(r.headers.get('retry-after')) || 10 * (attempt + 1));
-      await new Promise((ok) => setTimeout(ok, wait * 1000));
+      const retry = parseFloat(r.headers.get('retry-after')) || 0;
+      const text = await r.text();
+      // дневной лимит этой модели исчерпан — берём другую (у каждой модели свой лимит)
+      if (retry > 60 || /per day|RPD|TPD/i.test(text)) {
+        tried.add(model);
+        const next = await pickChatModel(engine, key, tried);
+        if (next) {
+          chrome.runtime.sendMessage({ type: 'notice', text: `Дневной лимит ${model} исчерпан — конспект пишет ${next}` }).catch(() => {});
+          model = next; continue;
+        }
+        throw new Error('Дневной бесплатный лимит ИИ Groq исчерпан для всех моделей. Конспект можно будет дописать завтра кнопкой «↻ Обновить конспект».');
+      }
+      await new Promise((ok) => setTimeout(ok, Math.min(60, retry || 10 * (attempt + 1)) * 1000));
       continue;
     }
     if (!r.ok) {
       const text = await r.text();
       // модель сняли с провайдера — сами выбираем доступную и запоминаем её
       if (!switched && (r.status === 404 || /model_not_found|decommissioned|does not exist/i.test(text))) {
-        const next = await pickChatModel(engine, key, model);
+        const next = await pickChatModel(engine, key, new Set([model]));
         if (next) {
           model = next; switched = true;
           const st = await getSettings();
@@ -150,14 +192,14 @@ async function callLLM(engine, settings, system, user) {
 }
 
 // Выбор доступной чат-модели из списка провайдера
-const PREFERRED = ['openai/gpt-oss-120b', 'moonshotai/kimi-k2-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct',
-  'openai/gpt-oss-20b', 'meta-llama/llama-4-scout-17b-16e-instruct', 'gpt-4o-mini', 'gpt-4.1-mini'];
-async function pickChatModel(engine, key, broken) {
+const PREFERRED = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'moonshotai/kimi-k2-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'meta-llama/llama-4-scout-17b-16e-instruct', 'qwen/qwen3-32b', 'gpt-4o-mini', 'gpt-4.1-mini'];
+async function pickChatModel(engine, key, exclude) {
   try {
     const r = await fetch(PROVIDERS[engine].baseUrl + '/models', { headers: { Authorization: 'Bearer ' + key } });
     if (!r.ok) return null;
     const ids = (await r.json()).data.filter((m) => m.active !== false).map((m) => m.id)
-      .filter((id) => id !== broken && !/whisper|tts|guard|embed|transcribe|audio|image|dall|moderation|prompt-guard|orpheus|playai/i.test(id));
+      .filter((id) => !exclude.has(id) && !/whisper|tts|guard|embed|transcribe|audio|image|dall|moderation|prompt-guard|orpheus|playai/i.test(id));
     return PREFERRED.find((id) => ids.includes(id)) || ids.find((id) => /gpt-oss|llama|qwen|kimi|gpt-4/i.test(id)) || ids[0] || null;
   } catch { return null; }
 }
@@ -226,12 +268,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'segment':
       updateSession(msg.sessionId, (s) => { s.segments.push({ t: msg.t, text: msg.text }); })
         // фрагменты, распознанные уже после «Стоп», конспектируем сразу, без ожидания порога
-        .then(() => getRec()).then((rec) => maybeMakeNotes(msg.sessionId, rec?.sessionId !== msg.sessionId));
+        .then(() => getRec()).then((rec) => maybeMakeNotes(msg.sessionId, rec?.sessionId !== msg.sessionId || !!rec?.videoPaused));
       return false;
     case 'queue':
       getRec().then((rec) => { if (rec) { rec.queue = msg.queue; chrome.storage.session.set({ rec }); } });
       chrome.runtime.sendMessage({ type: 'status-queue', queue: msg.queue }).catch(() => {});
       return false;
+    case 'video-state': onVideoState(msg, sender); return false;
+    case 'set-rate': reply(setRate(msg.rate)); return true;
     case 'capture-ended':
       stopRecording();
       return false;
@@ -251,6 +295,12 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   } catch (e) {
     broadcastStatus({ error: e.message });
   }
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+  if (info.status !== 'complete') return;
+  const rec = await getRec();
+  if (rec?.tabId === tabId) injectProbe(tabId);
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {

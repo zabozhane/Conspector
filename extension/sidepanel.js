@@ -26,9 +26,11 @@ function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&am
 
 function render() {
   const recHere = rec && rec.sessionId === sessionId;
-  $('statusText').innerHTML = rec
-    ? `<span class="dot on"></span>Идёт запись${rec.queue ? ` · распознаётся ${rec.queue}` : ''}`
-    : '<span class="dot"></span>Запись не идёт';
+  $('statusText').innerHTML = !rec ? '<span class="dot"></span>Запись не идёт'
+    : rec.videoPaused ? `<span class="dot"></span>Видео на паузе — запись ждёт${rec.queue ? ` · распознаётся ${rec.queue}` : ''}`
+    : `<span class="dot on"></span>Идёт запись${rec.queue ? ` · распознаётся ${rec.queue}` : ''}`;
+  $('speed').hidden = !rec;
+  document.querySelectorAll('#speed button').forEach((b) => b.classList.toggle('active', Number(b.dataset.rate) === (rec?.videoRate || 1)));
   $('toggle').className = rec ? 'rec' : 'primary';
   $('toggle').textContent = rec ? '■ Стоп' : '● Записать';
 
@@ -89,6 +91,11 @@ $('toggle').onclick = async () => {
   await loadSessions();
 };
 
+document.querySelectorAll('#speed button').forEach((b) => b.onclick = async () => {
+  const r = await chrome.runtime.sendMessage({ type: 'set-rate', rate: Number(b.dataset.rate) });
+  if (!r.ok) showErr(r.error);
+});
+
 async function action(btn, type) {
   showErr(''); btn.disabled = true;
   const r = await chrome.runtime.sendMessage({ type, sessionId });
@@ -129,6 +136,9 @@ chrome.runtime.onMessage.addListener((m) => {
   if (m.type === 'status') { rec = m.rec; if (m.error) showErr(m.error); loadSessions(); }
   if (m.type === 'status-queue' && rec) { rec.queue = m.queue; render(); }
   if (m.type === 'notes-progress' && m.sessionId === sessionId) { notesBusy = m.busy; render(); }
+  if (m.type === 'notice') {
+    const p = $('progress'); p.hidden = false; p.textContent = m.text; setTimeout(() => p.hidden = true, 8000);
+  }
   if (m.type === 'local-progress') {
     const p = $('progress');
     if (m.status === 'downloading') { p.hidden = false; p.textContent = `Скачиваю модель распознавания: ${Math.round(m.loaded / m.total * 100)}% (${Math.round(m.total / 1e6)} МБ, только в первый раз)`; }
